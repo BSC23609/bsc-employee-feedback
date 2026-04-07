@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Employee Feedback | Bharat Steel (Chennai) Pvt. Ltd.</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Source+Sans+Pro:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -1262,44 +1263,67 @@ function submitForm() {
   if (!validatePage(currentPage)) return;
 
   const data = collectFormData();
-  
-  // Point this to your Render backend
-  const serverUrl = 'https://bsc-employee-feedback.onrender.com/api/feedback';
-
-  // Optional: keep saving to localStorage if you want the Admin Dashboard to work locally
   allEntries.push(data);
   localStorage.setItem('bsc_feedback_entries', JSON.stringify(allEntries));
 
-  fetch(serverUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  })
-  .then(response => {
-    if (response.ok) {
-      document.getElementById('responseId').textContent = data.id;
-      
-      // Show thank you page
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-      document.getElementById('pageThanks').classList.add('active');
-      document.getElementById('progressFill').style.width = '100%';
-      document.querySelectorAll('.progress-step').forEach(s => {
-        s.classList.remove('active');
-        s.classList.add('done');
-      });
-      document.querySelectorAll('.progress-connector').forEach(c => c.classList.add('done'));
-    } else {
-      alert("There was an issue submitting your feedback to the server.");
-    }
-  })
-  .catch(error => {
-    console.error('Error:', error);
-    alert("Network error while submitting.");
+  // Visual feedback: change button text while generating PDF
+  const submitBtn = document.querySelector('.btn-success');
+  const originalText = submitBtn.innerHTML;
+  submitBtn.innerHTML = "Generating Report... Please wait";
+  submitBtn.disabled = true;
+
+  // Grab the beautiful Blue HTML template you already built
+  const htmlString = generatePDFHTML(data);
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = htmlString;
+
+  // PDF Formatting settings
+  const opt = {
+    margin:       0.5,
+    filename:     `${data.id}.pdf`,
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 2 },
+    jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+  };
+
+  // Convert HTML to PDF, then send to your Render server
+  html2pdf().set(opt).from(tempDiv).outputPdf('base64').then(function(pdfBase64) {
+    
+    const serverUrl = 'https://bsc-employee-feedback.onrender.com/api/feedback';
+
+    fetch(serverUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: data, pdfBase64: pdfBase64 }),
+    })
+    .then(response => {
+      if (response.ok) {
+        document.getElementById('responseId').textContent = data.id;
+        
+        // Show thank you page
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById('pageThanks').classList.add('active');
+        document.getElementById('progressFill').style.width = '100%';
+        document.querySelectorAll('.progress-step').forEach(s => {
+          s.classList.remove('active');
+          s.classList.add('done');
+        });
+        document.querySelectorAll('.progress-connector').forEach(c => c.classList.add('done'));
+      } else {
+        alert("There was an issue submitting your feedback.");
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert("Network error.");
+    })
+    .finally(() => {
+      submitBtn.innerHTML = originalText;
+      submitBtn.disabled = false;
+    });
+
   });
 }
-
 function resetForm() {
   document.getElementById('feedbackForm').reset();
   document.getElementById('identityFields').style.display = 'block';
